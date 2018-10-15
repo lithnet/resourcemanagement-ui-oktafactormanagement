@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Feature Id="8e129f5c-52e7-47b2-8c5a-12ca68aef3b7"
+          Title="Lithnet Okta Factor Management Module for FIM/MIM"
+          Description="Adds ability to manage Okta factors via FIM"
+          Version="1.0.0.0"
+          ActivateOnDefault="TRUE"
+          Hidden="FALSE"
+          Scope="Web"
+          xmlns="http://schemas.microsoft.com/sharepoint/">
+  <ElementManifests>
+    <ElementManifest Location="elements.xml"/>   
+  </ElementManifests>
+</Feature>
