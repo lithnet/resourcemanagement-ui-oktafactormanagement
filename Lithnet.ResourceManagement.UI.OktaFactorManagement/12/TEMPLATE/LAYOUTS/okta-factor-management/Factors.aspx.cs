@@ -144,7 +144,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             this.HasReadPermission = string.IsNullOrEmpty(AppConfigurationSection.CurrentConfig.ReadFactorsAuthZAttributeName) ||
                                      o.Attributes[AppConfigurationSection.CurrentConfig.ReadFactorsAuthZAttributeName].PermissionHint.HasFlag(AttributePermission.Read);
 
-            this.HasWritePermission = string.IsNullOrEmpty(AppConfigurationSection.CurrentConfig.WriteFactorsAuthZAttributeName) ||
+            this.HasWritePermission = !string.IsNullOrEmpty(AppConfigurationSection.CurrentConfig.WriteFactorsAuthZAttributeName) ||
                                       o.Attributes[AppConfigurationSection.CurrentConfig.WriteFactorsAuthZAttributeName].PermissionHint.HasFlag(AttributePermission.Modify);
 
             this.UserDisplayName = o.Attributes[AppConfigurationSection.CurrentConfig.DisplayNameAttributeName].StringValue;
