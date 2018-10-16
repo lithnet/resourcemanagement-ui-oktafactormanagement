@@ -13,12 +13,17 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
         {
             this.Provider = (string)factor["provider"];
             this.FactorType = (string)factor["factorType"];
-            this.DisplayName = GetFactorName(this.Provider, this.FactorType);
             this.Status = (string)factor["status"];
             this.LastUpdated = (DateTime?)factor["lastUpdated"];
             this.ID = (string)factor["id"];
             this.IDsToReset = new List<string>();
-            this.IDsToReset.Add(this.ID);
+            if (this.ID != null)
+            {
+                this.IDsToReset.Add(this.ID);
+            }
+
+            this.FactorTypeID = $"{this.Provider}/{this.FactorType}";
+            this.DisplayName = GetFactorName(this.FactorTypeID);
             this.Skip = string.IsNullOrEmpty(this.DisplayName);
         }
 
@@ -28,6 +33,8 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
         public string FactorType { get; }
 
+        public string FactorTypeID { get; }
+        
         public string DisplayName { get; }
 
         public string Status { get; }
@@ -42,9 +49,9 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
         public bool CanReset => !string.Equals(this.Status, "NOT_SETUP", StringComparison.OrdinalIgnoreCase);
 
-        private static string GetFactorName(string provider, string factorType)
+        private static string GetFactorName(string factorTypeID)
         {
-            string factorid = $"{provider}/{factorType}";
+            string factorid = factorTypeID;
 
             foreach (FactorNameMapping item in AppConfigurationSection.CurrentConfig.FactorNameMapping.OfType<FactorNameMapping>())
             {

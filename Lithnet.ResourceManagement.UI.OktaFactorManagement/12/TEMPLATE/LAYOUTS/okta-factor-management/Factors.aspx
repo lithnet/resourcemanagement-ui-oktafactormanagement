@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="common-layout.css" />
 </head>
-
+    
 <body>
     <form id="form1" runat="server">
         <asp:ScriptManager ID="ScriptManager1" runat="server" />
@@ -70,6 +70,36 @@
         function ResetPage() {
             window.location.href = "<%=this.Request.RawUrl%>";
         }
+
+        function SetDates() {
+            var elements = document.getElementsByClassName("timecell");
+
+            [].forEach.call(elements, function (el) {
+                var text = el.textContent;
+                var date = new Date(text);
+                el.textContent = date.toLocaleString();
+
+            });
+        }
+
+        function attachListener() {
+            if (window.attachEvent) {
+                window.attachEvent('onload', SetDates());
+            } else {
+                if (window.onload) {
+                    var curronload = window.onload;
+                    var newonload = function(evt) {
+                        curronload(evt);
+                        SetDates(evt);
+                    };
+                    window.onload = newonload;
+                } else {
+                    window.onload = SetDates();
+                }
+            }
+        }
+
+        attachListener();
     </script>
 </body>
 </html>

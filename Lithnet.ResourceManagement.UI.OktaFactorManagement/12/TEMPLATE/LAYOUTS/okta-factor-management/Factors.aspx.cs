@@ -23,9 +23,17 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             set => this.ViewState[nameof(this.UserOktaID)] = value;
         }
 
-        private bool HasReadPermission { get; set; }
+        private bool HasReadPermission
+        {
+            get => (bool)this.ViewState[nameof(this.HasReadPermission)];
+            set => this.ViewState[nameof(this.HasReadPermission)] = value;
+        }
 
-        private bool HasWritePermission { get; set; }
+        private bool HasWritePermission
+        {
+            get => (bool)this.ViewState[nameof(this.HasWritePermission)];
+            set => this.ViewState[nameof(this.HasWritePermission)] = value;
+        }
 
         private string EnrolledFactorsRaw
         {
@@ -72,6 +80,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
         private void PopulateUserTable()
         {
+            this.userInfoTable.Rows.Clear();
             this.AddRowToUserTable(this.UserDisplayName);
         }
 
@@ -116,6 +125,14 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
             response = client.DownloadString($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors/catalog");
             this.AvailableFactorsRaw = response;
+        }
+
+        private void ResetFactors(IEnumerable<string> factorIDs)
+        {
+            foreach (string factorID in factorIDs)
+            {
+                this.ResetFactor(factorID);
+            }
         }
 
         private void ResetFactor(string factorID)
@@ -204,7 +221,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             foreach (JToken t in value)
             {
                 OktaFactor f = new OktaFactor(t);
-                if (!f.IsActive && factors.All(u => u.ID != f.ID))
+                if (!f.IsActive && factors.All(u => u.FactorTypeID != f.FactorTypeID))
                 {
                     factors.Add(new OktaFactor(t));
                 }
@@ -295,10 +312,19 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
                 Text = factor.Status,
             });
 
-            row.Cells.Add(new TableCell
+            if (factor.LastUpdated.HasValue)
             {
-                Text = factor.LastUpdated.HasValue ? factor.LastUpdated.ToString() : null
-            });
+                row.Cells.Add(new TableCell
+                {
+                    Text = factor.LastUpdated.Value.ToString(),//.ToString("s") + ".000Z",
+                    ID = $"timez{rowCount}",
+                    CssClass ="timecell"
+                });
+            }
+            else
+            {
+                row.Cells.Add(new TableCell());
+            }
 
             if (this.HasWritePermission && factor.CanReset)
             {
@@ -306,7 +332,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
                 button.CssClass = "button";
                 button.Text = (string)this.GetLocalResourceObject("ResetFactor");
                 button.CommandName = "ResetFactor";
-                button.CommandArgument = string.Join(",", factor.IDsToReset);
+                button.CommandArgument = string.Join("~", factor.IDsToReset);
                 button.Command += this.Button_Command;
                 button.ID = $"button-reset-factor{rowCount}";
 
@@ -342,7 +368,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
                     return;
                 }
 
-                this.ResetFactor((string)e.CommandArgument);
+                this.ResetFactors(((string) e.CommandArgument).Split('~'));
                 this.ShowFactorResetSuccess();
                 this.GetEnrolledFactors();
                 this.PopulateFactorTable();
@@ -358,7 +384,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
         {
             int rowCount = this.userInfoTable.Rows.Count;
 
-            TableRow row = new TableRow { ID = $"row{rowCount}" };
+            TableRow row = new TableRow { ID = $"userInfoTablerow{rowCount}" };
 
             row.Cells.Add(new TableHeaderCell
             {
@@ -381,7 +407,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
         {
             int rowCount = this.userInfoTable.Rows.Count;
 
-            TableRow row = new TableRow { ID = $"row{rowCount}" };
+            TableRow row = new TableRow { ID = $"userInfoTablerow{rowCount}" };
 
             row.Cells.Add(new TableCell
             {
