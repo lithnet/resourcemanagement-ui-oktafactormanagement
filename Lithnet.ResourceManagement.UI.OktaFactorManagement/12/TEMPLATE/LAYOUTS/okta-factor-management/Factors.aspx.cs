@@ -49,6 +49,11 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
         private string UserObjectID => this.Request.QueryString["id"];
 
+        protected void Page_Init(object sender, EventArgs e)
+        {
+            this.ViewStateUserKey = this.Session.SessionID; 
+        }
+
         protected void Page_Load(object sender, EventArgs e)
         {
             try
