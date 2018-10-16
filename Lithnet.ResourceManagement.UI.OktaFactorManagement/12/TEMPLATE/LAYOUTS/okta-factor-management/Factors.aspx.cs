@@ -23,17 +23,9 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             set => this.ViewState[nameof(this.UserOktaID)] = value;
         }
 
-        private bool HasReadPermission
-        {
-            get => (bool)this.ViewState[nameof(this.HasReadPermission)];
-            set => this.ViewState[nameof(this.HasReadPermission)] = value;
-        }
+        private bool HasReadPermission { get; set; }
 
-        private bool HasWritePermission
-        {
-            get => (bool)this.ViewState[nameof(this.HasWritePermission)];
-            set => this.ViewState[nameof(this.HasWritePermission)] = value;
-        }
+        private bool HasWritePermission { get; set; }
 
         private string EnrolledFactorsRaw
         {
@@ -66,6 +58,10 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
                 this.PopulateUserTable();
                 this.PopulateFactorTable();
+            }
+            catch (ResourceNotFoundException)
+            {
+                this.SetError((string)this.GetLocalResourceObject("ErrorUserNotFound"));
             }
             catch (Exception ex)
             {
@@ -338,6 +334,8 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
         {
             try
             {
+                this.GetResource();
+
                 if (!this.HasWritePermission)
                 {
                     this.SetError((string)this.GetLocalResourceObject("AccessDenied"));
