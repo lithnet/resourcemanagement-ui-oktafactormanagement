@@ -11,6 +11,10 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 {
     public partial class Factors : System.Web.UI.Page
     {
+        private const string EventSourceName = "LithnetOktaFactorManagement";
+
+        private static SD.EventLog eventLog;
+
         private string UserDisplayName
         {
             get => (string)this.ViewState[nameof(this.UserDisplayName)];
@@ -51,7 +55,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
         protected void Page_Init(object sender, EventArgs e)
         {
-            this.ViewStateUserKey = this.Session.SessionID; 
+            //this.ViewStateUserKey = this.Session.SessionID; 
         }
 
         protected void Page_Load(object sender, EventArgs e)
@@ -74,10 +78,12 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             }
             catch (ResourceNotFoundException)
             {
+                this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requested factors for {this.UserObjectID} but an object with that ID was not found in the MIM service", SD.EventLogEntryType.Error, 5);
                 this.SetError((string)this.GetLocalResourceObject("ErrorUserNotFound"));
             }
             catch (Exception ex)
             {
+                this.LogEvent($"Unexpected error in app\n{ex}", SD.EventLogEntryType.Error, 6);
                 SD.Trace.WriteLine($"Exception in page_load\n {ex}");
                 this.SetError("An unexpected error occurred:\n" + ex);
             }
@@ -98,6 +104,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
             if (o == null)
             {
+                this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requested factors for {this.UserObjectID} but an object with that ID was not found in the MIM service", SD.EventLogEntryType.Error, 5);
                 this.SetError((string)this.GetLocalResourceObject("ErrorUserNotFound"));
                 return true;
             }
@@ -108,12 +115,15 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
             if (!this.HasReadPermission)
             {
+                this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requested factors for {this.UserDisplayName} ({this.UserOktaID}) but does not have permission to do so", SD.EventLogEntryType.FailureAudit, 4);
                 this.SetError((string)this.GetLocalResourceObject("AccessDenied"));
                 return true;
             }
 
-            this.UserOktaID = this.GetOktaID(o);
             this.GetEnrolledFactors();
+
+            this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requested factors for {this.UserDisplayName} ({this.UserOktaID})", SD.EventLogEntryType.SuccessAudit, 3);
+
             return false;
         }
 
@@ -132,25 +142,50 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             this.AvailableFactorsRaw = response;
         }
 
-        private void ResetFactors(IEnumerable<string> factorIDs)
+        private void ResetFactors(IEnumerable<string> factorIDs, string displayName)
         {
             foreach (string factorID in factorIDs)
             {
-                this.ResetFactor(factorID);
+                this.ResetFactor(factorID, displayName);
             }
         }
 
-        private void ResetFactor(string factorID)
+        private void ResetFactor(string factorID, string displayName)
         {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors/{factorID}");
+            try
+            {
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors/{factorID}");
 
-            request.Method = "DELETE";
-            request.Headers.Add("Authorization", $"SSWS {AppConfigurationSection.CurrentConfig.OktaApiKey}");
-            request.UserAgent = "LithnetOktaFactorManagement";
-            request.Accept = "application/json";
-            request.ContentType = "application/json";
+                request.Method = "DELETE";
+                request.Headers.Add("Authorization", $"SSWS {AppConfigurationSection.CurrentConfig.OktaApiKey}");
+                request.UserAgent = "LithnetOktaFactorManagement";
+                request.Accept = "application/json";
+                request.ContentType = "application/json";
 
-            request.GetResponse();
+                request.GetResponse();
+
+                this.LogEvent($"Factor {displayName} ({factorID}) for user {this.UserDisplayName} ({this.UserOktaID}) was reset by {System.Threading.Thread.CurrentPrincipal.Identity.Name}", SD.EventLogEntryType.SuccessAudit, 1);
+            }
+            catch (Exception ex)
+            {
+                this.LogEvent($"Factor {displayName} ({factorID}) for user {this.UserDisplayName} ({this.UserOktaID}) failed to be reset by {System.Threading.Thread.CurrentPrincipal.Identity.Name}.\n{ex}", SD.EventLogEntryType.Error, 2);
+                throw;
+            }
+        }
+
+        private void LogEvent(string message, SD.EventLogEntryType type, int id)
+        {
+            if (!SD.EventLog.SourceExists(EventSourceName))
+            {
+                return;
+            }
+
+            if (eventLog == null)
+            {
+                eventLog = new SD.EventLog("Application", ".", EventSourceName);
+            }
+
+            eventLog.WriteEntry(message, type, id);
         }
 
         private ResourceObject GetResource()
@@ -167,12 +202,9 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
             this.UserDisplayName = o.Attributes[AppConfigurationSection.CurrentConfig.DisplayNameAttributeName].StringValue;
 
-            return o;
-        }
+            this.UserOktaID = o.Attributes[AppConfigurationSection.CurrentConfig.OktaIDAttributeName]?.StringValue;
 
-        private string GetOktaID(ResourceObject o)
-        {
-            return o.Attributes[AppConfigurationSection.CurrentConfig.OktaIDAttributeName]?.StringValue;
+            return o;
         }
 
         private IEnumerable<string> GetRmcAttributesToGet()
@@ -321,9 +353,9 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             {
                 row.Cells.Add(new TableCell
                 {
-                    Text = factor.LastUpdated.Value.ToString(),//.ToString("s") + ".000Z",
+                    Text = factor.LastUpdated.Value.ToString("s") + @".000Z",
                     ID = $"timez{rowCount}",
-                    CssClass ="timecell"
+                    CssClass = "timecell"
                 });
             }
             else
@@ -337,7 +369,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
                 button.CssClass = "button";
                 button.Text = (string)this.GetLocalResourceObject("ResetFactor");
                 button.CommandName = "ResetFactor";
-                button.CommandArgument = string.Join("~", factor.IDsToReset);
+                button.CommandArgument = string.Join("~", factor.IDsToReset) + "$" + factor.FactorTypeID;
                 button.Command += this.Button_Command;
                 button.ID = $"button-reset-factor{rowCount}";
 
@@ -373,7 +405,15 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
                     return;
                 }
 
-                this.ResetFactors(((string) e.CommandArgument).Split('~'));
+                var split = ((string)e.CommandArgument).Split('$');
+
+                if (split.Length <= 1)
+                {
+                    throw new ArgumentException();
+                }
+
+                string factorType = split[split.Length - 1] ?? "Unknown";
+                this.ResetFactors(split[0].Split('~'), factorType);
                 this.ShowFactorResetSuccess();
                 this.GetEnrolledFactors();
                 this.PopulateFactorTable();
