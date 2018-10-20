@@ -51,6 +51,8 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             set => this.ViewState[nameof(this.AvailableFactorsRaw)] = value;
         }
 
+        private bool HasOktaIDPermission { get; set; }
+
         private string UserObjectID => this.Request.QueryString["id"];
 
         protected void Page_Init(object sender, EventArgs e)
@@ -83,8 +85,8 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             }
             catch (Exception ex)
             {
-                this.LogEvent($"Unexpected error in app\n{ex}", SD.EventLogEntryType.Error, 6);
                 SD.Trace.WriteLine($"Exception in page_load\n {ex}");
+                this.LogEvent($"Unexpected error in app\n{ex}", SD.EventLogEntryType.Error, 6);
                 this.SetError("An unexpected error occurred:\n" + ex);
             }
         }
@@ -113,12 +115,28 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
                 SD.Trace.WriteLine($"Got resource {o.ObjectID} from resource management service");
             }
 
+            if (!this.HasOktaIDPermission)
+            {
+                this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requested factors for {this.UserDisplayName} ({this.UserOktaID}) but does not have permission to read the resource's okta ID", SD.EventLogEntryType.FailureAudit, 7);
+                this.SetError((string)this.GetLocalResourceObject("AccessDenied"));
+                return true;
+            }
+
+            if (string.IsNullOrEmpty(this.UserOktaID))
+            {
+                this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requested factors for {this.UserDisplayName} ({this.UserOktaID}) but the resource has no OktaID in the MIM service", SD.EventLogEntryType.FailureAudit, 8);
+                this.SetError((string)this.GetLocalResourceObject("ErrorUserNotFound"));
+                return true;
+            }
+
             if (!this.HasReadPermission)
             {
                 this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requested factors for {this.UserDisplayName} ({this.UserOktaID}) but does not have permission to do so", SD.EventLogEntryType.FailureAudit, 4);
                 this.SetError((string)this.GetLocalResourceObject("AccessDenied"));
                 return true;
             }
+
+            this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} requesting factors for {this.UserDisplayName} ({this.UserOktaID})", SD.EventLogEntryType.Information, 9);
 
             this.GetEnrolledFactors();
 
@@ -129,17 +147,25 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
         private void GetEnrolledFactors()
         {
-            WebClient client = new WebClient();
-            client.Headers.Add("Authorization", $"SSWS {AppConfigurationSection.CurrentConfig.OktaApiKey}");
-            client.Headers.Add("User-Agent", "LithnetOktaFactorManagement");
-            client.Headers.Add("Accept", "application/json");
-            client.Headers.Add("Content-Type", "application/json");
+            try
+            {
+                WebClient client = new WebClient();
+                client.Headers.Add("Authorization", $"SSWS {AppConfigurationSection.CurrentConfig.OktaApiKey}");
+                client.Headers.Add("User-Agent", "LithnetOktaFactorManagement");
+                client.Headers.Add("Accept", "application/json");
+                client.Headers.Add("Content-Type", "application/json");
 
-            string response = client.DownloadString($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors");
-            this.EnrolledFactorsRaw = response;
+                string response = client.DownloadString($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors");
+                this.EnrolledFactorsRaw = response;
 
-            response = client.DownloadString($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors/catalog");
-            this.AvailableFactorsRaw = response;
+                response = client.DownloadString($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors/catalog");
+                this.AvailableFactorsRaw = response;
+            }
+            catch (Exception ex)
+            {
+                this.LogEvent($"{System.Threading.Thread.CurrentPrincipal.Identity.Name} failed to request factors for {this.UserDisplayName} ({this.UserOktaID})\n{ex}", SD.EventLogEntryType.Error, 10);
+                throw;
+            }
         }
 
         private void ResetFactors(IEnumerable<string> factorIDs, string displayName)
@@ -154,7 +180,7 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
         {
             try
             {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors/{factorID}");
+                HttpWebRequest request = (HttpWebRequest) WebRequest.Create($"{AppConfigurationSection.CurrentConfig.OktaDomain}/api/v1/users/{this.UserOktaID}/factors/{factorID}");
 
                 request.Method = "DELETE";
                 request.Headers.Add("Authorization", $"SSWS {AppConfigurationSection.CurrentConfig.OktaApiKey}");
@@ -166,6 +192,17 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
                 this.LogEvent($"Factor {displayName} ({factorID}) for user {this.UserDisplayName} ({this.UserOktaID}) was reset by {System.Threading.Thread.CurrentPrincipal.Identity.Name}", SD.EventLogEntryType.SuccessAudit, 1);
             }
+            catch (WebException ex)
+            {
+                if (ex.Response is HttpWebResponse errorResponse && errorResponse.StatusCode == HttpStatusCode.NotFound)
+                {
+                    this.LogEvent($"Factor {displayName} ({factorID}) for user {this.UserDisplayName} ({this.UserOktaID}) could not be reset by {System.Threading.Thread.CurrentPrincipal.Identity.Name} because it was not found", SD.EventLogEntryType.Warning, 12);
+                    return;
+                }
+
+                this.LogEvent($"Factor {displayName} ({factorID}) for user {this.UserDisplayName} ({this.UserOktaID}) failed to be reset by {System.Threading.Thread.CurrentPrincipal.Identity.Name}.\n{ex}", SD.EventLogEntryType.Error,11);
+                throw;
+            }
             catch (Exception ex)
             {
                 this.LogEvent($"Factor {displayName} ({factorID}) for user {this.UserDisplayName} ({this.UserOktaID}) failed to be reset by {System.Threading.Thread.CurrentPrincipal.Identity.Name}.\n{ex}", SD.EventLogEntryType.Error, 2);
@@ -175,6 +212,8 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
 
         private void LogEvent(string message, SD.EventLogEntryType type, int id)
         {
+            SD.Trace.WriteLine(message);
+
             if (!SD.EventLog.SourceExists(EventSourceName))
             {
                 return;
@@ -185,7 +224,10 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
                 eventLog = new SD.EventLog("Application", ".", EventSourceName);
             }
 
-            eventLog.WriteEntry(message, type, id);
+            using (System.Security.Principal.WindowsIdentity.Impersonate(IntPtr.Zero))
+            {
+                eventLog.WriteEntry(message, type, id);
+            }
         }
 
         private ResourceObject GetResource()
@@ -197,10 +239,12 @@ namespace Lithnet.ResourceManagement.UI.OktaFactorManagement
             this.HasReadPermission = string.IsNullOrEmpty(AppConfigurationSection.CurrentConfig.ReadFactorsAuthZAttributeName) ||
                                      o.Attributes[AppConfigurationSection.CurrentConfig.ReadFactorsAuthZAttributeName].PermissionHint.HasFlag(AttributePermission.Read);
 
-            this.HasWritePermission = !string.IsNullOrEmpty(AppConfigurationSection.CurrentConfig.WriteFactorsAuthZAttributeName) ||
+            this.HasWritePermission = !string.IsNullOrEmpty(AppConfigurationSection.CurrentConfig.WriteFactorsAuthZAttributeName) &&
                                       o.Attributes[AppConfigurationSection.CurrentConfig.WriteFactorsAuthZAttributeName].PermissionHint.HasFlag(AttributePermission.Modify);
 
             this.UserDisplayName = o.Attributes[AppConfigurationSection.CurrentConfig.DisplayNameAttributeName].StringValue;
+
+            this.HasOktaIDPermission = o.Attributes[AppConfigurationSection.CurrentConfig.OktaIDAttributeName].PermissionHint.HasFlag(AttributePermission.Read);
 
             this.UserOktaID = o.Attributes[AppConfigurationSection.CurrentConfig.OktaIDAttributeName]?.StringValue;
 
