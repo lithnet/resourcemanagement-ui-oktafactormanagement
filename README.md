@@ -14,12 +14,10 @@ The Lithnet Okta factor management module is an extension to the FIM/MIM portal 
 ## Getting started
 The module is a simple WSP package that needs to be deployed into your SharePoint farm. The [installation guide](https://github.com/lithnet/resourcemanagement-ui-oktafactormanagement/wiki/Installation-and-upgrade-steps) covers all the steps for installing and upgrading the module
 
-## How can I contribute to the project
-Found an issue?
-* [Log it](https://github.com/lithnet/resourcemanagement-ui-oktafactormanagement/issues)
-
-Want to fix an issue?
-* Fork the project and submit a pull request 
+## How can I contribute to the project?
+* Found an issue and want us to fix it? [Log it](https://github.com/lithnet/resourcemanagement-ui-oktafactormanagement/issues)
+* Want to fix an issue yourself or add functionality? Clone the project and submit a pull request
+* Make a [donation](https://lithnet.io/donate) and help us cover our costs
 
 ## Keep up to date
 * [Visit my blog](http://blog.lithiumblue.com)
